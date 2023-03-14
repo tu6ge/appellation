@@ -1,6 +1,7 @@
+use std::fmt::Display;
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum Token<'a> {
+pub enum TokenKind<'a> {
     /// `的` in `爸爸的爸爸`
     Link,
     /// `是` in `爸爸的爸爸是什么`
@@ -9,6 +10,37 @@ pub enum Token<'a> {
     What,
     /// 标识符， `爸爸`, `妈妈`等
     Ident(&'a str),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Token<'a> {
+    kind: TokenKind<'a>,
+    span: Span,
+}
+
+impl<'a> Token<'a> {
+    fn new(kind: TokenKind<'a>, start: usize) -> Token<'a> {
+        Token {
+            kind,
+            span: Span {
+                start,
+                end: start + 3,
+            },
+        }
+    }
+
+    pub(crate) fn kind(&self) -> &TokenKind<'a> {
+        &self.kind
+    }
+
+    #[cfg(test)]
+    fn is_kind<'b>(&self, kind: TokenKind<'b>) -> bool {
+        self.kind == kind
+    }
+
+    pub(crate) fn end_span(&self) -> usize {
+        self.span.end
+    }
 }
 
 // enum Label {
@@ -52,7 +84,62 @@ fn check_keyword(str: char) -> bool {
     )
 }
 
-pub fn lexer<'a>(source: &'a str) -> Result<Vec<Token<'a>>, &'static str> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Span {
+    start: usize,
+    end: usize,
+}
+
+impl Span {
+    pub fn len(&self) -> usize {
+        1.max((self.end - self.start) / 3 * 2)
+    }
+
+    pub fn print_space(&self) {
+        let str = " ".repeat(self.start / 3 * 2);
+        print!("{str}");
+    }
+
+    pub fn print_ref(&self) {
+        let str = "^".repeat(self.len());
+        print!("\x1b[0;31m");
+        print!("{str}");
+        print!("\x1b[0m");
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Error {
+    pub(crate) span: Span,
+    pub(crate) message: String,
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl Error {
+    pub(crate) fn new(message: &str, start: usize, length: usize) -> Error {
+        Self {
+            span: Span {
+                start,
+                end: start + length,
+            },
+            message: message.into(),
+        }
+    }
+
+    pub(crate) fn from_token(message: &str, token: &Token) -> Error {
+        Self {
+            span: token.span.clone(),
+            message: message.into(),
+        }
+    }
+}
+
+pub fn lexer<'a>(source: &'a str) -> Result<Vec<Token<'a>>, Error> {
     let mut indices = source.char_indices();
 
     let mut tokens = Vec::new();
@@ -66,22 +153,26 @@ pub fn lexer<'a>(source: &'a str) -> Result<Vec<Token<'a>>, &'static str> {
         };
 
         let token = match char {
-            '的' => Token::Link,
-            '是' => Token::Is,
+            _ if char.len_utf8() != 3_usize => {
+                return Err(Error::new("只允许汉字", start_usize, char.len_utf8()))
+            }
+            '的' => Token::new(TokenKind::Link, start_usize),
+            '是' => Token::new(TokenKind::Is, start_usize),
             '什' => {
                 let mut iter = indices.clone().peekable();
                 match iter.peek() {
                     Some((_, con)) => {
                         if con == &'么' {
                             indices.next();
-                            Token::What
+                            Token::new(TokenKind::What, start_usize)
                         } else {
-                            return Err("语法错误，期望在 `什` 后面是的 `么`");
+                            return Err(Error::new("期望在 `什` 后面是的 `么`", start_usize, 3));
                         }
                     }
-                    None => return Err("语法错误，不能以 `什` 作为结尾"),
+                    None => return Err(Error::new("不能以 `什` 作为结尾", start_usize, 3)),
                 }
             }
+
             _ if check_keyword(char) => {
                 let mut iter = indices.clone().peekable();
                 let t;
@@ -91,21 +182,27 @@ pub fn lexer<'a>(source: &'a str) -> Result<Vec<Token<'a>>, &'static str> {
                         Some((last_usize, con)) => {
                             current_usize = last_usize;
                             if !check_keyword(con) {
-                                t = Token::Ident(&source[start_usize..last_usize]);
+                                t = Token::new(
+                                    TokenKind::Ident(&source[start_usize..last_usize]),
+                                    start_usize,
+                                );
                                 break;
                             } else {
                                 indices.next();
                             }
                         }
                         None => {
-                            t = Token::Ident(&source[start_usize..current_usize + 3]);
+                            t = Token::new(
+                                TokenKind::Ident(&source[start_usize..current_usize + 3]),
+                                start_usize,
+                            );
                             break;
                         }
                     }
                 }
                 t
             }
-            _ => return Err("未定义的字符串"),
+            _ => return Err(Error::new("未定义字符", start_usize, char.len_utf8())),
         };
 
         tokens.push(token);
@@ -116,33 +213,28 @@ pub fn lexer<'a>(source: &'a str) -> Result<Vec<Token<'a>>, &'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{lexer, Token};
+    use super::*;
 
     #[test]
     fn test_lexer() {
-        let res = lexer("的");
-        assert_eq!(res, Ok(vec![Token::Link]));
+        let res = lexer("的").unwrap();
+        assert_eq!(res[0].kind(), &TokenKind::Link);
 
-        let res = lexer("是");
-        assert_eq!(res, Ok(vec![Token::Is]));
+        let res = lexer("是").unwrap();
+        assert_eq!(res[0].kind(), &TokenKind::Is);
 
-        let res = lexer("什么");
-        assert_eq!(res, Ok(vec![Token::What]));
+        let res = lexer("什么").unwrap();
+        assert_eq!(res[0].kind(), &TokenKind::What);
 
-        let res = lexer("爸爸");
-        assert_eq!(res, Ok(vec![Token::Ident("爸爸")]));
+        let res = lexer("爸爸").unwrap();
+        assert_eq!(res[0].kind(), &TokenKind::Ident("爸爸"));
 
-        let res = lexer("爸叔");
-        assert_eq!(res, Ok(vec![Token::Ident("爸叔")]));
+        let res = lexer("爸叔").unwrap();
+        assert_eq!(res[0].kind(), &TokenKind::Ident("爸叔"));
 
-        let res = lexer("爸爸的爷爷");
-        assert_eq!(
-            res,
-            Ok(vec![
-                Token::Ident("爸爸"),
-                Token::Link,
-                Token::Ident("爷爷"),
-            ])
-        );
+        let res = lexer("爸爸的爷爷").unwrap();
+        assert!(res[0].is_kind(TokenKind::Ident("爸爸")));
+        assert!(res[1].is_kind(TokenKind::Link));
+        assert!(res[2].is_kind(TokenKind::Ident("爷爷")));
     }
 }
