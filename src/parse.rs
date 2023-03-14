@@ -3,10 +3,10 @@ use std::{collections::HashMap, fmt::Display};
 use crate::lexer::{lexer, Token};
 use lazy_static::lazy_static;
 
-type Relation = HashMap<(&'static str, &'static str), &'static str>;
+pub type Relation = HashMap<(&'static str, &'static str), &'static str>;
 
 lazy_static! {
-    static ref INNER_RELATION: Relation = {
+    pub static ref INNER_RELATION: Relation = {
         let mut map = Relation::new();
         map.insert(("爸爸", "爸爸"), "爷爷");
         map.insert(("爸爸", "妈妈"), "奶奶");
@@ -37,7 +37,10 @@ impl<'a> Appellation<'a> {
     }
 }
 
-pub fn parse<'a>(source: &'a str) -> Result<Appellation<'a>, &'static str> {
+pub fn parse<'a, 'b>(
+    source: &'a str,
+    map: &'b mut Relation,
+) -> Result<Appellation<'a>, &'static str> {
     let tokens = lexer(source)?;
     let mut tokens = tokens.iter();
 
@@ -71,10 +74,15 @@ pub fn parse<'a>(source: &'a str) -> Result<Appellation<'a>, &'static str> {
 
     match what {
         Token::What => (),
+        Token::Ident(result) => {
+            map.insert((first.to_owned(), second.to_owned()), result.to_owned());
+        }
         _ => return Err("语法错误，期望 `什么`"),
     };
 
-    match INNER_RELATION.get(&(first, second)) {
+    //
+
+    match map.get(&(first, second)) {
         Some(result) => Ok(Appellation {
             first,
             second,
@@ -86,11 +94,14 @@ pub fn parse<'a>(source: &'a str) -> Result<Appellation<'a>, &'static str> {
 
 #[cfg(test)]
 mod tests {
+    use crate::parse::Relation;
+
     use super::parse;
 
     #[test]
     fn yeye() {
-        let res = parse("爸爸的爸爸是什么").unwrap();
+        let mut map = Relation::new();
+        let res = parse("爸爸的爸爸是什么", &mut map).unwrap();
 
         assert_eq!(res.result(), "爷爷");
 

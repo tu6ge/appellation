@@ -1,4 +1,3 @@
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum Token<'a> {
     /// `的` in `爸爸的爸爸`
@@ -9,6 +8,8 @@ pub enum Token<'a> {
     What,
     /// 标识符， `爸爸`, `妈妈`等
     Ident(&'a str),
+    /// 结束符
+    Eof,
 }
 
 // enum Label {
@@ -68,6 +69,8 @@ pub fn lexer<'a>(source: &'a str) -> Result<Vec<Token<'a>>, &'static str> {
         let token = match char {
             '的' => Token::Link,
             '是' => Token::Is,
+            '\r' => Token::Eof,
+            '\n' => Token::Eof,
             '什' => {
                 let mut iter = indices.clone().peekable();
                 match iter.peek() {
