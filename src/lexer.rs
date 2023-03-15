@@ -81,6 +81,8 @@ fn check_keyword(str: char) -> bool {
             | '弟'
             | '姥'
             | '姨'
+            | '女'
+            | '儿'
     )
 }
 

@@ -10,6 +10,14 @@ lazy_static! {
         let mut map = Relation::new();
         map.insert(("爸爸", "爸爸"), "爷爷");
         map.insert(("爸爸", "妈妈"), "奶奶");
+        map.insert(("妈妈", "妈妈"), "姥姥");
+        map.insert(("妈妈", "爸爸"), "姥爷");
+        map.insert(("爸爸", "哥哥"), "伯伯");
+        map.insert(("爸爸", "弟弟"), "叔叔");
+        map.insert(("爸爸", "妹妹"), "姑姑");
+        map.insert(("爸爸", "姐姐"), "姑姑");
+        map.insert(("哥哥", "儿子"), "侄子");
+        map.insert(("哥哥", "女儿"), "侄女");
         map
     };
 }
