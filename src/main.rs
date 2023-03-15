@@ -1,6 +1,6 @@
 use std::env;
 
-use parse::{print_error_message, ParserError};
+use parse::{print_error_message, Parser, ParserError};
 
 mod lexer;
 mod parse;
@@ -14,7 +14,9 @@ fn main() {
 
     let content = &args[1];
 
-    let result = parse::parse(content);
+    let parser = Parser::new(content);
+
+    let result = parser.to_appellation();
 
     match result {
         Ok(app) => {

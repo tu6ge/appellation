@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenKind<'a> {
     /// `的` in `爸爸的爸爸`
     Link,
@@ -10,9 +10,14 @@ pub enum TokenKind<'a> {
     What,
     /// 标识符， `爸爸`, `妈妈`等
     Ident(&'a str),
+
+    /// `老` in `爸爸的老大`
+    SortPre,
+    /// `二` in `爸爸的老二`
+    Sort(&'a str),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Token<'a> {
     kind: TokenKind<'a>,
     span: Span,
@@ -22,10 +27,7 @@ impl<'a> Token<'a> {
     fn new(kind: TokenKind<'a>, start: usize) -> Token<'a> {
         Token {
             kind,
-            span: Span {
-                start,
-                end: start + 3,
-            },
+            span: Span { start, length: 3 },
         }
     }
 
@@ -39,7 +41,11 @@ impl<'a> Token<'a> {
     }
 
     pub(crate) fn end_span(&self) -> usize {
-        self.span.end
+        self.span.start + self.span.length
+    }
+
+    pub(crate) fn length(&self) -> usize {
+        self.span.length
     }
 }
 
@@ -84,15 +90,19 @@ fn check_keyword(str: char) -> bool {
     )
 }
 
+fn check_sort(str: char) -> bool {
+    matches!(str, '大' | '二' | '三' | '四' | '五' | '六' | '七' | '八')
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Span {
     start: usize,
-    end: usize,
+    length: usize,
 }
 
 impl Span {
     pub fn len(&self) -> usize {
-        1.max((self.end - self.start) / 3 * 2)
+        1.max(self.length / 3 * 2)
     }
 
     pub fn print_space(&self) {
@@ -123,10 +133,7 @@ impl Display for Error {
 impl Error {
     pub(crate) fn new(message: &str, start: usize, length: usize) -> Error {
         Self {
-            span: Span {
-                start,
-                end: start + length,
-            },
+            span: Span { start, length },
             message: message.into(),
         }
     }
@@ -158,6 +165,7 @@ pub fn lexer<'a>(source: &'a str) -> Result<Vec<Token<'a>>, Error> {
             }
             '的' => Token::new(TokenKind::Link, start_usize),
             '是' => Token::new(TokenKind::Is, start_usize),
+            '老' => Token::new(TokenKind::SortPre, start_usize),
             '什' => {
                 let mut iter = indices.clone().peekable();
                 match iter.peek() {
@@ -172,7 +180,10 @@ pub fn lexer<'a>(source: &'a str) -> Result<Vec<Token<'a>>, Error> {
                     None => return Err(Error::new("不能以 `什` 作为结尾", start_usize, 3)),
                 }
             }
-
+            _ if check_sort(char) => Token::new(
+                TokenKind::Sort(&source[start_usize..start_usize + 3]),
+                start_usize,
+            ),
             _ if check_keyword(char) => {
                 let mut iter = indices.clone().peekable();
                 let t;

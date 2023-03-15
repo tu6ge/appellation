@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::lexer::{lexer, Error, Span, TokenKind};
+use crate::lexer::{lexer, Error, Span, Token, TokenKind};
+use core::slice::Iter;
 use lazy_static::lazy_static;
 
 type Relation = HashMap<(&'static str, &'static str), &'static str>;
@@ -10,6 +11,7 @@ lazy_static! {
         let mut map = Relation::new();
         map.insert(("爸爸", "爸爸"), "爷爷");
         map.insert(("爸爸", "妈妈"), "奶奶");
+        map.insert(("爸爸", "老大"), "大哥或自己");
         map
     };
 }
@@ -58,58 +60,101 @@ impl From<Error> for ParserError {
     }
 }
 
-pub fn parse<'a>(source: &'a str) -> Result<Appellation<'a>, ParserError> {
-    let tokens = lexer(source).map_err(ParserError::from)?;
-    let mut tokens = tokens.iter();
+pub struct Parser<'a> {
+    source: &'a str,
+    current_offset: usize,
+    tokens: Vec<Token<'a>>,
+}
 
-    let first_token = tokens.next().ok_or(Error::new("找不到第一个称呼", 0, 1))?;
-    let first = if let TokenKind::Ident(name) = first_token.kind() {
-        name
-    } else {
-        return Err(Error::from_token("期望一个称呼", first_token).into());
-    };
-
-    let link_token = tokens
-        .next()
-        .ok_or(Error::new("找不到 `的`", first_token.end_span(), 1))?;
-    match link_token.kind() {
-        TokenKind::Link => (),
-        _ => return Err(Error::from_token("期望 `的`", link_token).into()),
+impl<'a> Parser<'a> {
+    pub fn new(source: &'a str) -> Self {
+        Self {
+            source,
+            current_offset: 0,
+            tokens: Vec::default(),
+        }
     }
 
-    let second_token =
-        tokens
+    pub fn parse(&mut self) -> Result<(), ParserError> {
+        self.tokens = lexer(self.source).map_err(ParserError::from)?;
+        let tokens = self.tokens.clone();
+        let mut tokens = tokens.iter();
+
+        let first_token =
+            tokens
+                .next()
+                .ok_or(Error::new("找不到第一个称呼", self.current_offset, 1))?;
+        let first = if let TokenKind::Ident(name) = first_token.kind() {
+            self.current_offset += first_token.length();
+            name
+        } else {
+            return Err(Error::from_token("期望一个称呼", first_token).into());
+        };
+
+        let link_token = tokens
             .next()
-            .ok_or(Error::new("找不到第二个称呼", link_token.end_span(), 1))?;
-    let second = if let TokenKind::Ident(name) = second_token.kind() {
-        name
-    } else {
-        return Err(Error::from_token("期望一个称呼", second_token).into());
-    };
+            .ok_or(Error::new("找不到 `的`", self.current_offset, 1))?;
+        match link_token.kind() {
+            TokenKind::Link => {
+                self.current_offset += link_token.length();
+            }
+            _ => return Err(Error::from_token("期望 `的`", link_token).into()),
+        }
 
-    let is_token = tokens
-        .next()
-        .ok_or(Error::new("找不到 `是`", second_token.end_span(), 1))?;
-    match is_token.kind() {
-        TokenKind::Is => (),
-        _ => return Err(Error::from_token("期望 `是`", is_token).into()),
+        let second = self.parser_second_name(&mut tokens)?;
+
+        let is_token = tokens
+            .next()
+            .ok_or(Error::new("找不到 `是`", self.current_offset, 1))?;
+        match is_token.kind() {
+            TokenKind::Is => {
+                self.current_offset += is_token.length();
+            }
+            _ => return Err(Error::from_token("期望 `是`", is_token).into()),
+        }
+
+        let what_token =
+            tokens
+                .next()
+                .ok_or(Error::new("找不到 `什么`", self.current_offset, 1))?;
+        match what_token.kind() {
+            TokenKind::What => {
+                self.current_offset += what_token.length();
+            }
+            _ => return Err(Error::from_token("语法错误，期望 `什么`", what_token).into()),
+        };
+
+        match INNER_RELATION.get(&(first, &second)) {
+            Some(result) => Ok(()),
+            None => Err(ParserError::NoResult),
+        }
     }
 
-    let what_token = tokens
-        .next()
-        .ok_or(Error::new("找不到 `什么`", is_token.end_span(), 1))?;
-    match what_token.kind() {
-        TokenKind::What => (),
-        _ => return Err(Error::from_token("语法错误，期望 `什么`", what_token).into()),
-    };
+    pub fn to_appellation(&self) -> Result<Appellation, ParserError> {
+        //     Appellation {
+        //     first,
+        //     second,
+        //     result,
+        // }
+        todo!()
+    }
 
-    match INNER_RELATION.get(&(first, second)) {
-        Some(result) => Ok(Appellation {
-            first,
-            second,
-            result,
-        }),
-        None => Err(ParserError::NoResult),
+    fn parser_second_name<'b>(
+        &'a mut self,
+        tokens: &'b mut Iter<Token>,
+    ) -> Result<String, ParserError> {
+        let second_token =
+            tokens
+                .next()
+                .ok_or(Error::new("找不到第二个称呼", self.current_offset, 1))?;
+        let second = if let TokenKind::Ident(name) = second_token.kind() {
+            self.current_offset += second_token.length();
+            name
+        } else {
+            return Err(Error::from_token("期望一个称呼", second_token).into());
+        };
+
+        Ok(second.to_string())
     }
 }
 
@@ -130,11 +175,12 @@ fn print_error(msg: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::parse;
+    use super::*;
 
     #[test]
     fn yeye() {
-        let res = parse("爸爸的爸爸是什么").unwrap();
+        let parser = Parser::new("爸爸的爸爸是什么");
+        let res = parser.to_appellation().unwrap();
 
         assert_eq!(res.result(), "爷爷");
 
