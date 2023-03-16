@@ -22,10 +22,7 @@ impl<'a> Token<'a> {
     fn new(kind: TokenKind<'a>, start: usize) -> Token<'a> {
         Token {
             kind,
-            span: Span {
-                start,
-                end: start + 3,
-            },
+            span: Span { start, length: 3 },
         }
     }
 
@@ -39,7 +36,7 @@ impl<'a> Token<'a> {
     }
 
     pub(crate) fn end_span(&self) -> usize {
-        self.span.end
+        self.span.end()
     }
 }
 
@@ -89,12 +86,16 @@ fn check_keyword(str: char) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Span {
     start: usize,
-    end: usize,
+    length: usize,
 }
 
 impl Span {
     pub fn len(&self) -> usize {
-        1.max((self.end - self.start) / 3 * 2)
+        1.max((self.length) / 3 * 2)
+    }
+
+    pub fn end(&self) -> usize {
+        self.start + self.length
     }
 
     pub fn print_space(&self) {
@@ -125,10 +126,7 @@ impl Display for Error {
 impl Error {
     pub(crate) fn new(message: &str, start: usize, length: usize) -> Error {
         Self {
-            span: Span {
-                start,
-                end: start + length,
-            },
+            span: Span { start, length },
             message: message.into(),
         }
     }
