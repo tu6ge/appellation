@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+pub(crate) const EOF_CHAR: char = '\0';
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum TokenKind<'a> {
     /// `的` in `爸爸的爸爸`
@@ -57,7 +59,7 @@ impl<'a> Token<'a> {
 //     妹妹,
 // }
 
-fn check_keyword(str: char) -> bool {
+pub(crate) fn check_keyword(str: char) -> bool {
     matches!(
         str,
         '爸' | '妈'

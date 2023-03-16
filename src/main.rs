@@ -4,6 +4,7 @@ use parse::{print_error_message, ParserError};
 
 mod lexer;
 mod parse;
+mod record;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
