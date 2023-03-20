@@ -1,6 +1,6 @@
 use std::str::CharIndices;
 
-use crate::lexer::{check_keyword, Error, Span, EOF_CHAR};
+use crate::lexer::{check_keyword, Span, EOF_CHAR};
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TokenKind<'a> {
@@ -18,8 +18,8 @@ pub enum TokenKind<'a> {
     Comment,
     /// 未知字符
     Unknown,
-    // /// 结束
-    // Eof,
+    /// 结束
+    Eof,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -98,7 +98,7 @@ fn eat_while2(indices: &mut CharIndices, mut predicate: impl FnMut(char) -> bool
     offset
 }
 
-pub fn lexer<'a>(source: &'a str) -> Result<Vec<TokenKind<'a>>, Error> {
+pub fn lexer<'a>(source: &'a str) -> Vec<TokenKind<'a>> {
     let mut indices = source.char_indices();
 
     let mut tokens = Vec::new();
@@ -107,7 +107,10 @@ pub fn lexer<'a>(source: &'a str) -> Result<Vec<TokenKind<'a>>, Error> {
         let char_indice = indices.next();
 
         let (start_usize, char) = match char_indice {
-            None => break,
+            None => {
+                tokens.push(TokenKind::Eof);
+                break;
+            }
             Some(res) => res,
         };
 
@@ -137,7 +140,7 @@ pub fn lexer<'a>(source: &'a str) -> Result<Vec<TokenKind<'a>>, Error> {
         tokens.push(token);
     }
 
-    Ok(tokens)
+    tokens
 }
 
 #[cfg(test)]
@@ -146,7 +149,7 @@ mod tests {
 
     #[test]
     fn test_base() {
-        let tokens = lexer("#abc\n \t   \n\r\n\r\n\n爷爷爷 > 爸爸").unwrap();
+        let tokens = lexer("#abc\n \t   \n\r\n\r\n\n爷爷爷 > 爸爸");
         assert_eq!(
             tokens,
             vec![
@@ -157,14 +160,18 @@ mod tests {
                 TokenKind::Whitespace,
                 TokenKind::Link,
                 TokenKind::Whitespace,
-                TokenKind::Name("爸爸")
+                TokenKind::Name("爸爸"),
+                TokenKind::Eof,
             ]
         );
 
-        let tokens = lexer("#abc").unwrap();
-        assert_eq!(tokens, vec![TokenKind::Comment]);
+        let tokens = lexer("#abc");
+        assert_eq!(tokens, vec![TokenKind::Comment, TokenKind::Eof]);
 
-        let tokens = lexer("郑").unwrap();
-        assert_eq!(tokens, vec![TokenKind::Unknown]);
+        let tokens = lexer("郑");
+        assert_eq!(tokens, vec![TokenKind::Unknown, TokenKind::Eof]);
+
+        let tokens = lexer("");
+        assert_eq!(tokens, vec![TokenKind::Eof]);
     }
 }

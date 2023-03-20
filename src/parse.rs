@@ -3,21 +3,21 @@ use std::{collections::HashMap, fmt::Display};
 use crate::lexer::{lexer, Error, Span, TokenKind};
 use lazy_static::lazy_static;
 
-type Relation = HashMap<(&'static str, &'static str), &'static str>;
+pub type Relation<'a> = HashMap<(&'a str, &'a str), &'a str>;
 
 lazy_static! {
-    static ref INNER_RELATION: Relation = {
+    static ref INNER_RELATION: Relation<'static> = {
         let mut map = Relation::new();
         map.insert(("爸爸", "爸爸"), "爷爷");
         map.insert(("爸爸", "妈妈"), "奶奶");
-        map.insert(("妈妈", "妈妈"), "姥姥");
-        map.insert(("妈妈", "爸爸"), "姥爷");
-        map.insert(("爸爸", "哥哥"), "伯伯");
-        map.insert(("爸爸", "弟弟"), "叔叔");
-        map.insert(("爸爸", "妹妹"), "姑姑");
-        map.insert(("爸爸", "姐姐"), "姑姑");
-        map.insert(("哥哥", "儿子"), "侄子");
-        map.insert(("哥哥", "女儿"), "侄女");
+        // map.insert(("妈妈", "妈妈"), "姥姥");
+        // map.insert(("妈妈", "爸爸"), "姥爷");
+        // map.insert(("爸爸", "哥哥"), "伯伯");
+        // map.insert(("爸爸", "弟弟"), "叔叔");
+        // map.insert(("爸爸", "妹妹"), "姑姑");
+        // map.insert(("爸爸", "姐姐"), "姑姑");
+        // map.insert(("哥哥", "儿子"), "侄子");
+        // map.insert(("哥哥", "女儿"), "侄女");
         map
     };
 }
@@ -66,7 +66,7 @@ impl From<Error> for ParserError {
     }
 }
 
-pub fn parse<'a>(source: &'a str) -> Result<Appellation<'a>, ParserError> {
+pub fn parse<'a>(source: &'a str, other_map: Relation<'a>) -> Result<Appellation<'a>, ParserError> {
     let tokens = lexer(source).map_err(ParserError::from)?;
     let mut tokens = tokens.iter();
 
@@ -111,7 +111,11 @@ pub fn parse<'a>(source: &'a str) -> Result<Appellation<'a>, ParserError> {
         _ => return Err(Error::from_token("语法错误，期望 `什么`", what_token).into()),
     };
 
-    match INNER_RELATION.get(&(first, second)) {
+    // let mut map = INNER_RELATION;
+
+    // map.extend(other_map);
+
+    match other_map.get(&(first, second)) {
         Some(result) => Ok(Appellation {
             first,
             second,
@@ -138,11 +142,13 @@ fn print_error(msg: &str) {
 
 #[cfg(test)]
 mod tests {
+    use crate::parse::Relation;
+
     use super::parse;
 
     #[test]
     fn yeye() {
-        let res = parse("爸爸的爸爸是什么").unwrap();
+        let res = parse("爸爸的爸爸是什么", Relation::new()).unwrap();
 
         assert_eq!(res.result(), "爷爷");
 

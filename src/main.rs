@@ -1,6 +1,7 @@
-use std::env;
+use std::{env, fs};
 
 use parse::{print_error_message, ParserError};
+use record::parse_str;
 
 mod lexer;
 mod parse;
@@ -15,7 +16,11 @@ fn main() {
 
     let content = &args[1];
 
-    let result = parse::parse(content);
+    let file_content = fs::read_to_string("./data.apl").expect("read data.apl failed");
+
+    let map_data = parse_str(&file_content).unwrap();
+
+    let result = parse::parse(content, map_data);
 
     match result {
         Ok(app) => {
